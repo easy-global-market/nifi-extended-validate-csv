@@ -17,15 +17,12 @@
 package io.egm.processors.validation;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -52,8 +49,6 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
-import org.apache.nifi.processor.io.InputStreamCallback;
-import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.supercsv.cellprocessor.Optional;
 import org.supercsv.cellprocessor.ParseBigDecimal;
@@ -120,7 +115,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
             .displayName("Schema")
             .description("The schema to be used for validation. Is expected a comma-delimited string representing the cell "
                     + "processors to apply. The following cell processors are allowed in the schema definition: "
-                    + allowedOperators.toString() + ". Note: cell processors cannot be nested except with Optional.")
+                    + allowedOperators + ". Note: cell processors cannot be nested except with Optional.")
             .required(true)
             .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_EL_VALIDATOR)
@@ -190,19 +185,9 @@ public class ExtendedValidateCsv extends AbstractProcessor {
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
-        final List<PropertyDescriptor> properties = new ArrayList<>();
-        properties.add(SCHEMA);
-        properties.add(HEADER);
-        properties.add(DELIMITER_CHARACTER);
-        properties.add(QUOTE_CHARACTER);
-        properties.add(END_OF_LINE_CHARACTER);
-        properties.add(VALIDATION_STRATEGY);
-        this.properties = Collections.unmodifiableList(properties);
+        this.properties = List.of(SCHEMA, HEADER, DELIMITER_CHARACTER, QUOTE_CHARACTER, END_OF_LINE_CHARACTER, VALIDATION_STRATEGY);
 
-        final Set<Relationship> relationships = new HashSet<>();
-        relationships.add(REL_VALID);
-        relationships.add(REL_INVALID);
-        this.relationships = Collections.unmodifiableSet(relationships);
+        this.relationships = Set.of(REL_VALID, REL_INVALID);
     }
 
     @Override
@@ -259,24 +244,24 @@ public class ExtendedValidateCsv extends AbstractProcessor {
         List<CellProcessor> processorsList = new ArrayList<>();
 
         String remaining = schema;
-        while(remaining.length() > 0) {
+        while (!remaining.isEmpty()) {
             remaining = setProcessor(remaining, processorsList);
         }
 
-        return processorsList.toArray(new CellProcessor[processorsList.size()]);
+        return processorsList.toArray(new CellProcessor[0]);
     }
 
     private String setProcessor(String remaining, List<CellProcessor> processorsList) {
-        StringBuffer buffer = new StringBuffer();
+        StringBuilder builder = new StringBuilder();
         String inputString = remaining;
         int i = 0;
         int opening = 0;
         int closing = 0;
-        while(buffer.length() != inputString.length()) {
+        while (builder.length() != inputString.length()) {
             char c = remaining.charAt(i);
             i++;
 
-            if(opening == 0 && c == ',') {
+            if (opening == 0 && c == ',') {
                 if(i == 1) {
                     inputString = inputString.substring(1);
                     continue;
@@ -284,20 +269,20 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 break;
             }
 
-            buffer.append(c);
+            builder.append(c);
 
-            if(c == '(') {
+            if (c == '(') {
                 opening++;
-            } else if(c == ')') {
+            } else if (c == ')') {
                 closing++;
             }
 
-            if(opening > 0 && opening == closing) {
+            if (opening > 0 && opening == closing) {
                 break;
             }
         }
 
-        final String procString = buffer.toString().trim();
+        final String procString = builder.toString().trim();
         opening = procString.indexOf('(');
         String method = procString;
         String argument = null;
@@ -449,111 +434,96 @@ public class ExtendedValidateCsv extends AbstractProcessor {
         final CellProcessor[] cellProcs = this.parseSchema(schema);
         final boolean isWholeFFValidation = context.getProperty(VALIDATION_STRATEGY).getValue().equals(VALIDATE_WHOLE_FLOWFILE.getValue());
 
-        final AtomicReference<Boolean> valid = new AtomicReference<Boolean>(true);
-        final AtomicReference<Boolean> isFirstLineValid = new AtomicReference<Boolean>(true);
-        final AtomicReference<Boolean> isFirstLineInvalid = new AtomicReference<Boolean>(true);
-        final AtomicReference<Integer> okCount = new AtomicReference<Integer>(0);
-        final AtomicReference<Integer> totalCount = new AtomicReference<Integer>(0);
-        final AtomicReference<FlowFile> invalidFF = new AtomicReference<FlowFile>(null);
-        final AtomicReference<FlowFile> validFF = new AtomicReference<FlowFile>(null);
-        final AtomicReference<String> validationError = new AtomicReference<String>(null);
+        final AtomicReference<Boolean> valid = new AtomicReference<>(true);
+        final AtomicReference<Boolean> isFirstLineValid = new AtomicReference<>(true);
+        final AtomicReference<Boolean> isFirstLineInvalid = new AtomicReference<>(true);
+        final AtomicReference<Integer> okCount = new AtomicReference<>(0);
+        final AtomicReference<Integer> totalCount = new AtomicReference<>(0);
+        final AtomicReference<FlowFile> invalidFF = new AtomicReference<>(null);
+        final AtomicReference<FlowFile> validFF = new AtomicReference<>(null);
+        final AtomicReference<String> validationError = new AtomicReference<>(null);
 
         if(!isWholeFFValidation) {
             invalidFF.set(session.create(flowFile));
             validFF.set(session.create(flowFile));
         }
 
-        session.read(flowFile, new InputStreamCallback() {
-            @Override
-            public void process(final InputStream in) throws IOException {
-                try(final NifiCsvListReader listReader = new NifiCsvListReader(new InputStreamReader(in), csvPref)) {
+        session.read(flowFile, in -> {
+            try (final NifiCsvListReader listReader = new NifiCsvListReader(new InputStreamReader(in), csvPref)) {
 
-                    // handling of header
-                    if(header) {
+                // handling of header
+                if(header) {
 
-                        // read header
-                        listReader.read();
+                    // read header
+                    listReader.read();
 
-                        if(!isWholeFFValidation) {
-                            invalidFF.set(session.append(invalidFF.get(), new OutputStreamCallback() {
-                                @Override
-                                public void process(OutputStream out) throws IOException {
-                                    out.write(print(listReader.getUntokenizedRow(), csvPref, true));
-                                }
-                            }));
-                            validFF.set(session.append(validFF.get(), new OutputStreamCallback() {
-                                @Override
-                                public void process(OutputStream out) throws IOException {
-                                    out.write(print(listReader.getUntokenizedRow(), csvPref, true));
-                                }
-                            }));
-                            isFirstLineValid.set(false);
-                            isFirstLineInvalid.set(false);
-                        }
+                    if (!isWholeFFValidation) {
+                        invalidFF.set(session.append(invalidFF.get(), out ->
+                                out.write(print(listReader.getUntokenizedRow(), csvPref, true)))
+                        );
+                        validFF.set(session.append(validFF.get(), out ->
+                                out.write(print(listReader.getUntokenizedRow(), csvPref, true)))
+                        );
+                        isFirstLineValid.set(false);
+                        isFirstLineInvalid.set(false);
                     }
-
-                    boolean stop = false;
-
-                    while (!stop) {
-                        try {
-
-                            // read next row and check if no more row
-                            stop = listReader.read(cellProcs) == null;
-
-                            if(!isWholeFFValidation && !stop) {
-                                validFF.set(session.append(validFF.get(), new OutputStreamCallback() {
-                                    @Override
-                                    public void process(OutputStream out) throws IOException {
-                                        out.write(print(listReader.getUntokenizedRow(), csvPref, isFirstLineValid.get()));
-                                    }
-                                }));
-                                okCount.set(okCount.get() + 1);
-
-                                if(isFirstLineValid.get()) {
-                                    isFirstLineValid.set(false);
-                                }
-                            }
-
-                        } catch (final SuperCsvException e) {
-                            valid.set(false);
-                            if(isWholeFFValidation) {
-                                validationError.set(e.getLocalizedMessage());
-                                logger.debug("Failed to validate {} against schema due to {}; routing to 'invalid'", new Object[]{flowFile}, e);
-                                break;
-                            } else {
-                                // we append the invalid line to the flow file that will be routed to invalid relationship
-                                invalidFF.set(session.append(invalidFF.get(), new OutputStreamCallback() {
-                                    @Override
-                                    public void process(OutputStream out) throws IOException {
-                                        out.write(print(listReader.getUntokenizedRow(), csvPref, isFirstLineInvalid.get()));
-                                    }
-                                }));
-
-                                if(isFirstLineInvalid.get()) {
-                                    isFirstLineInvalid.set(false);
-                                }
-
-                                if(validationError.get() == null) {
-                                    validationError.set(e.getLocalizedMessage());
-                                }
-                            }
-                        } finally {
-                            if(!isWholeFFValidation) {
-                                totalCount.set(totalCount.get() + 1);
-                            }
-                        }
-                    }
-
-                } catch (final IOException e) {
-                    valid.set(false);
-                    logger.error("Failed to validate {} against schema due to {}", new Object[]{flowFile}, e);
                 }
+
+                boolean stop = false;
+
+                while (!stop) {
+                    try {
+
+                        // read next row and check if no more row
+                        stop = listReader.read(cellProcs) == null;
+
+                        if(!isWholeFFValidation && !stop) {
+                            validFF.set(session.append(validFF.get(), out ->
+                                    out.write(print(listReader.getUntokenizedRow(), csvPref, isFirstLineValid.get())))
+                            );
+                            okCount.set(okCount.get() + 1);
+
+                            if(isFirstLineValid.get()) {
+                                isFirstLineValid.set(false);
+                            }
+                        }
+
+                    } catch (final SuperCsvException e) {
+                        valid.set(false);
+                        if(isWholeFFValidation) {
+                            validationError.set(e.getLocalizedMessage());
+                            logger.debug("Failed to validate {} against schema due to {}; routing to 'invalid'", new Object[]{flowFile}, e);
+                            break;
+                        } else {
+                            // we append the invalid line to the flow file that will be routed to invalid relationship
+                            invalidFF.set(session.append(invalidFF.get(), out ->
+                                    out.write(print(listReader.getUntokenizedRow(), csvPref, isFirstLineInvalid.get())))
+                            );
+
+                            if(isFirstLineInvalid.get()) {
+                                isFirstLineInvalid.set(false);
+                            }
+
+                            if(validationError.get() == null) {
+                                validationError.set(e.getLocalizedMessage());
+                            }
+                        }
+                    } finally {
+                        if(!isWholeFFValidation) {
+                            totalCount.set(totalCount.get() + 1);
+                        }
+                    }
+                }
+
+            } catch (final IOException e) {
+                valid.set(false);
+                logger.error("Failed to validate {} against schema due to {}", new Object[]{flowFile}, e);
             }
         });
 
         if(isWholeFFValidation) {
             if (valid.get()) {
-                logger.debug("Successfully validated {} against schema; routing to 'valid'", new Object[]{flowFile});
+                logger.debug("Successfully validated {} against schema; routing to 'valid'", flowFile);
                 session.getProvenanceReporter().route(flowFile, REL_VALID);
                 session.transfer(flowFile, REL_VALID);
             } else {
@@ -563,7 +533,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
             }
         } else {
             if (valid.get()) {
-                logger.debug("Successfully validated {} against schema; routing to 'valid'", new Object[]{validFF.get()});
+                logger.debug("Successfully validated {} against schema; routing to 'valid'", validFF.get());
                 session.getProvenanceReporter().route(validFF.get(), REL_VALID, "All " + totalCount.get() + " line(s) are valid");
                 session.putAttribute(validFF.get(), "count.valid.lines", Integer.toString(totalCount.get()));
                 session.putAttribute(validFF.get(), "count.total.lines", Integer.toString(totalCount.get()));
@@ -575,7 +545,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 totalCount.set(totalCount.get() - 1);
 
                 logger.debug("Successfully validated {}/{} line(s) in {} against schema; routing valid lines to 'valid' and invalid lines to 'invalid'",
-                        new Object[]{okCount.get(), totalCount.get(), flowFile});
+                        okCount.get(), totalCount.get(), flowFile);
                 session.getProvenanceReporter().route(validFF.get(), REL_VALID, okCount.get() + " valid line(s)");
                 session.putAttribute(validFF.get(), "count.total.lines", Integer.toString(totalCount.get()));
                 session.putAttribute(validFF.get(), "count.valid.lines", Integer.toString(okCount.get()));
@@ -587,7 +557,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 session.transfer(invalidFF.get(), REL_INVALID);
                 session.remove(flowFile);
             } else {
-                logger.debug("All lines in {} are invalid; routing to 'invalid'", new Object[]{invalidFF.get()});
+                logger.debug("All lines in {} are invalid; routing to 'invalid'", invalidFF.get());
                 session.getProvenanceReporter().route(invalidFF.get(), REL_INVALID, "All " + totalCount.get() + " line(s) are invalid");
                 session.putAttribute(invalidFF.get(), "count.invalid.lines", Integer.toString(totalCount.get()));
                 session.putAttribute(invalidFF.get(), "count.total.lines", Integer.toString(totalCount.get()));
@@ -600,11 +570,11 @@ public class ExtendedValidateCsv extends AbstractProcessor {
     }
 
     private byte[] print(String row, CsvPreference csvPref, boolean isFirstLine) {
-        StringBuffer buffer = new StringBuffer();
+        StringBuilder builder = new StringBuilder();
         if (!isFirstLine) {
-            buffer.append(csvPref.getEndOfLineSymbols());
+            builder.append(csvPref.getEndOfLineSymbols());
         }
-        return buffer.append(row).toString().getBytes();
+        return builder.append(row).toString().getBytes();
     }
 
     /**
@@ -624,8 +594,8 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 throw new NullPointerException("Processors should not be null");
             }
             if( readRow() ) {
-                super.executeProcessors(new ArrayList<Object>(getColumns().size()), processors);
-                return new ArrayList<Object>(getColumns());
+                super.executeProcessors(new ArrayList<>(getColumns().size()), processors);
+                return new ArrayList<>(getColumns());
             }
             return null; // EOF
         }
