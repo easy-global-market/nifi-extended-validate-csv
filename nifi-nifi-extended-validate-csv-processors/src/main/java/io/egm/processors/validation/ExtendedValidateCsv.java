@@ -185,6 +185,17 @@ public class ExtendedValidateCsv extends AbstractProcessor {
             .defaultValue("false")
             .build();
 
+    public static final PropertyDescriptor ACCUMULATE_ALL_ERRORS = new PropertyDescriptor.Builder()
+            .name("accumulate-all-errors")
+            .displayName("Accumulate all errors")
+            .description("If true, the validation.error.message attribute would include the list of all the errors"
+                    + " for the first 50 lines. Note that setting this property to true would slightly decrease"
+                    + " the performances as all columns of each line would be validated.")
+            .required(true)
+            .allowableValues("true", "false")
+            .defaultValue("false")
+            .build();
+
     public static final Relationship REL_VALID = new Relationship.Builder()
             .name("valid")
             .description("FlowFiles that are successfully validated against the schema are routed to this relationship")
@@ -199,7 +210,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
-        this.properties = List.of(SCHEMA, HEADER, DELIMITER_CHARACTER, QUOTE_CHARACTER, END_OF_LINE_CHARACTER, VALIDATION_STRATEGY, INCLUDE_ALL_VIOLATIONS);
+        this.properties = List.of(SCHEMA, HEADER, DELIMITER_CHARACTER, QUOTE_CHARACTER, END_OF_LINE_CHARACTER, VALIDATION_STRATEGY, INCLUDE_ALL_VIOLATIONS, ACCUMULATE_ALL_ERRORS);
 
         this.relationships = Set.of(REL_VALID, REL_INVALID);
     }
@@ -448,6 +459,8 @@ public class ExtendedValidateCsv extends AbstractProcessor {
         final CellProcessor[] cellProcs = this.parseSchema(schema);
         final boolean isWholeFFValidation = context.getProperty(VALIDATION_STRATEGY).getValue().equals(VALIDATE_WHOLE_FLOWFILE.getValue());
         final boolean includeAllViolations = context.getProperty(INCLUDE_ALL_VIOLATIONS).asBoolean();
+        final boolean accumulateAllErrors = context.getProperty(ACCUMULATE_ALL_ERRORS).asBoolean();
+
 
         final AtomicReference<Boolean> valid = new AtomicReference<>(true);
         final AtomicReference<Boolean> isFirstLineValid = new AtomicReference<>(true);
@@ -456,7 +469,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
         final AtomicReference<Integer> totalCount = new AtomicReference<>(0);
         final AtomicReference<FlowFile> invalidFF = new AtomicReference<>(null);
         final AtomicReference<FlowFile> validFF = new AtomicReference<>(null);
-        final AtomicReference<String> validationError = new AtomicReference<>(null);
+        final AtomicReference<String> validationError = new AtomicReference<>("");
 
         if(!isWholeFFValidation) {
             invalidFF.set(session.create(flowFile));
@@ -485,12 +498,13 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 }
 
                 boolean stop = false;
+                List<String> errors = new ArrayList<>();
 
                 while (!stop) {
                     try {
 
                         // read next row and check if no more row
-                        stop = listReader.read(includeAllViolations && valid.get(),cellProcs) == null;
+                        stop = listReader.read(includeAllViolations && valid.get(), accumulateAllErrors, errors, cellProcs) == null;
 
                         if(!isWholeFFValidation && !stop) {
                             validFF.set(session.append(validFF.get(), out ->
@@ -505,6 +519,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
 
                     } catch (final SuperCsvException e) {
                         valid.set(false);
+                        validationError.set(e.getMessage());
                         if(isWholeFFValidation) {
                             validationError.set(e.getLocalizedMessage());
                             logger.debug("Failed to validate {} against schema due to {}; routing to 'invalid'", new Object[]{flowFile}, e);
@@ -603,22 +618,26 @@ public class ExtendedValidateCsv extends AbstractProcessor {
             super(reader, preferences);
         }
 
-        public List<Object> read(boolean includeAllViolations, CellProcessor... processors) throws IOException {
+        public List<Object> read(boolean includeAllViolations, boolean accumulateAllErrors, List<String> errors, CellProcessor... processors) throws IOException {
             if( processors == null ) {
                 throw new NullPointerException("Processors should not be null");
             }
-            if( readRow() ) {
-                executeProcessors(new ArrayList<>(getColumns().size()), processors, includeAllViolations);
+            if( readRow() && getRowNumber() <= 50) {
+                executeProcessors(new ArrayList<>(getColumns().size()), processors, includeAllViolations, accumulateAllErrors, errors);
                 return new ArrayList<>(getColumns());
             }
             return null; // EOF
         }
-        protected List<Object> executeProcessors(List<Object> processedColumns, CellProcessor[] processors, boolean includeAllViolations) {
-            this.executeCellProcessors(processedColumns, getColumns(), processors, getLineNumber(), getRowNumber(), includeAllViolations);
+        protected List<Object> executeProcessors(List<Object> processedColumns, CellProcessor[] processors,
+                                                 boolean includeAllViolations, boolean accumulateAllErrors, List<String> errors) {
+            this.executeCellProcessors(processedColumns, getColumns(), processors, getLineNumber(), getRowNumber(), includeAllViolations, accumulateAllErrors, errors);
+            if (!errors.isEmpty() && (accumulateAllErrors || includeAllViolations)) {
+                throw new SuperCsvException(String.join(" ", errors));
+            }
             return processedColumns;
         }
-        private void executeCellProcessors(final List<Object> destination, final List<?> source,
-                                           final CellProcessor[] processors, final int lineNo, final int rowNo, boolean includeAllViolations) {
+        private List<String> executeCellProcessors(final List<Object> destination, final List<?> source,
+                                           final CellProcessor[] processors, final int lineNo, final int rowNo, boolean includeAllViolations, boolean accumulateAllErrors, List<String> errors) {
 
             // the context used when cell processors report exceptions
             final CsvContext context = new CsvContext(lineNo, rowNo, 1);
@@ -633,8 +652,6 @@ public class ExtendedValidateCsv extends AbstractProcessor {
 
             destination.clear();
 
-            List<String> errors = new ArrayList<>();
-
             for (int i = 0; i < source.size(); i++) {
 
                 try {
@@ -647,26 +664,18 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                     }
 
                 } catch (SuperCsvException e) {
-                    if (includeAllViolations) {
-                        if (errors.isEmpty()) {
-                            errors.add(String.format("At {line=%d, row=%d}", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber()));
-                        }
-                        final String coordinates = String.format("{column=%d}", e.getCsvContext().getColumnNumber());
-                        final String errorMessage = e.getLocalizedMessage() + " at " + coordinates;
+                    if (includeAllViolations || accumulateAllErrors) {
+                        final String errorMessage = String.format("At {line=%d, column=%d} : %s\n", e.getCsvContext().getLineNumber(), e.getCsvContext().getColumnNumber(), e.getMessage());
                         errors.add(errorMessage);
                     } else {
-                        final String coordinates = String.format("{line=%d, row=%d, column=%d}", e.getCsvContext().getLineNumber(),
-                                e.getCsvContext().getRowNumber(), e.getCsvContext().getColumnNumber());
-                        final String errorMessage = e.getLocalizedMessage() + " at " + coordinates;
-                        throw new SuperCsvException(errorMessage);
+                        final String errorMessage = String.format("At {line=%d, column=%d} : %s\n", e.getCsvContext().getLineNumber(), e.getCsvContext().getColumnNumber(), e.getMessage());
+                        errors.add(errorMessage);
+                        throw new SuperCsvException(String.join("", errors));
                     }
                 }
             }
 
-            if (!errors.isEmpty()) {
-                throw new SuperCsvException(String.join(", ", errors));
-            }
+            return errors;
         }
     }
-
 }
