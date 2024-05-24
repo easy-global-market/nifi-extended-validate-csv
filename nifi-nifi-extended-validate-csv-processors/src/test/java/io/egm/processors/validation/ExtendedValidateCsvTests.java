@@ -386,6 +386,8 @@ public class ExtendedValidateCsvTests {
         runner.enqueue("John,22/111954,htf\r\nBob,01/03/2004,45.0\r\nSam,11/199876,20\r\nMary,12/05/1988,65.3");
         runner.run();
         runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 1);
+
 
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
                 "At {line=1, column=2} : '22/111954' could not be parsed as a Date\n" +
