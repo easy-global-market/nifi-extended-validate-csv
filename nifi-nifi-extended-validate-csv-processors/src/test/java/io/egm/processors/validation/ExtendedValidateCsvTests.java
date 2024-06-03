@@ -483,7 +483,7 @@ public class ExtendedValidateCsvTests {
     }
 
     @Test
-    public void testAccumulateAllErrorsAndIncludeAllViolations() {
+    public void testValidateWholeFlowFileAccumulateAllErrorsAndIncludeAllViolations() {
         final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
         runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
         runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
