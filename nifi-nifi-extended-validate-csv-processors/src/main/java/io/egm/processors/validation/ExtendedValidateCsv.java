@@ -189,7 +189,8 @@ public class ExtendedValidateCsv extends AbstractProcessor {
             .name("accumulate-all-errors")
             .displayName("Accumulate all errors")
             .description("If true, the validation.error.message attribute would include the first violation found in a column " +
-                    "for every line in the CSV file if no maximum number of lines is configured.")
+                    "for every line in the CSV file if no maximum number of lines is configured. Combined with the Include All Violations" +
+                    "property, the validation.error.message attribute would contain the violations in all columns for every line. ")
             .dependsOn(VALIDATION_STRATEGY,VALIDATE_WHOLE_FLOWFILE)
             .required(true)
             .allowableValues("true", "false")
@@ -199,7 +200,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
     public static final PropertyDescriptor MAX_LINES = new PropertyDescriptor.Builder()
             .name("max-lines")
             .displayName("Maximum number of lines")
-            .description("The maximum number of lines to be validated in the CSV file. " +
+            .description("The maximum number of lines to be validated in the CSV file regardless of the validation strategy. " +
                     "If no value is configured all lines will be validated.")
             .required(false)
             .addValidator(StandardValidators.INTEGER_VALIDATOR)
@@ -469,7 +470,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
         final boolean isWholeFFValidation = context.getProperty(VALIDATION_STRATEGY).getValue().equals(VALIDATE_WHOLE_FLOWFILE.getValue());
         final boolean includeAllViolations = context.getProperty(INCLUDE_ALL_VIOLATIONS).asBoolean();
         final boolean accumulateAllErrors = context.getProperty(ACCUMULATE_ALL_ERRORS).asBoolean();
-        final String maxNumberOfLines = context.getProperty(MAX_LINES).getValue();
+        final Integer maxNumberOfLines = context.getProperty(MAX_LINES).asInteger();
 
 
         final AtomicReference<Boolean> valid = new AtomicReference<>(true);
@@ -631,25 +632,18 @@ public class ExtendedValidateCsv extends AbstractProcessor {
             super(reader, preferences);
         }
 
-        public List<Object> read(boolean includeAllViolations, String maxNumberOfLines, CellProcessor... processors) throws IOException {
+        public List<Object> read(boolean includeAllViolations, Integer maxNumberOfLines, CellProcessor... processors) throws IOException {
             if( processors == null ) {
                 throw new NullPointerException("Processors should not be null");
             }
-            if (!readRow()) {
+            if (!readRow() || (maxNumberOfLines != null && getRowNumber() > maxNumberOfLines)) {
                 return null; // EOF
             }
 
-            if (maxNumberOfLines != null && getRowNumber() > Integer.parseInt(maxNumberOfLines)) {
-                return null;
-            }
-
-            List<Object> columns = new ArrayList<>(getColumns().size());
-            executeProcessors(columns, processors, includeAllViolations);
-            columns.addAll(getColumns());
-            return columns;
+            executeProcessors(new ArrayList<>(getColumns().size()), processors, includeAllViolations);
+            return new ArrayList<>(getColumns());
         }
-        protected List<Object> executeProcessors(List<Object> processedColumns, CellProcessor[] processors,
-                                                 boolean includeAllViolations) {
+        protected List<Object> executeProcessors(List<Object> processedColumns, CellProcessor[] processors, boolean includeAllViolations) {
             this.executeCellProcessors(processedColumns, getColumns(), processors, getLineNumber(), getRowNumber(), includeAllViolations);
             return processedColumns;
         }

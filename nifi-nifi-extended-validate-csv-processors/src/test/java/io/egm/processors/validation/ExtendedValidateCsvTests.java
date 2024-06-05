@@ -125,8 +125,7 @@ public class ExtendedValidateCsvTests {
         runner.run();
         runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
-                "At {line=1, row=1}, '22/111954' could not be parsed as a Date at {column=2}, " +
-                        "'abc' could not be parsed as a Double at {column=3}");
+                "At {line=1, row=1}, '22/111954' could not be parsed as a Date at {column=2}, 'abc' could not be parsed as a Double at {column=3}");
     }
 
     @Test
@@ -508,6 +507,28 @@ public class ExtendedValidateCsvTests {
                         "'abc' could not be parsed as a Double at {column=3}" +
                         "At {line=3, row=3}, '10/071998' could not be parsed as a Date at {column=2}," +
                         " 'abc' could not be parsed as a Double at {column=3}");
+
+    }
+
+    @Test
+    public void testValidateWholeFlowFileWithoutAccumulateAllErrorsAndWithoutIncludeAllViolations() {
+        final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
+        runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
+        runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
+        runner.setProperty(ExtendedValidateCsv.QUOTE_CHARACTER, "\"");
+        runner.setProperty(ExtendedValidateCsv.HEADER, "false");
+
+
+        runner.setProperty(ExtendedValidateCsv.SCHEMA, "Null, ParseDate(\"dd/MM/yyyy\"), Optional(ParseDouble())");
+
+        runner.enqueue("John,2211/1954,abc\r\nBob,01/03/2004,45.0\r\nMary,10/071998,abc");
+        runner.run();
+        runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 0);
+
+
+        runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
+                "'2211/1954' could not be parsed as a Date at {line=1, row=1, column=2}");
 
     }
 }
