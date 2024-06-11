@@ -388,4 +388,147 @@ public class ExtendedValidateCsvTests {
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_VALID).get(0).assertContentEquals("Header 1, Header 2, Header 3\n\"Content 1a, Content 1b\", Content 2, Content 3");
         runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 0);
     }
+
+    @Test
+    public void testValidateLinesIndividuallyAndIncludeAllViolations() {
+        final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
+        runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
+        runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
+        runner.setProperty(ExtendedValidateCsv.QUOTE_CHARACTER, "\"");
+        runner.setProperty(ExtendedValidateCsv.HEADER, "false");
+        runner.setProperty(ExtendedValidateCsv.VALIDATION_STRATEGY, ExtendedValidateCsv.VALIDATE_LINES_INDIVIDUALLY);
+
+        runner.setProperty(ExtendedValidateCsv.INCLUDE_ALL_VIOLATIONS, "true");
+
+
+        runner.setProperty(ExtendedValidateCsv.SCHEMA, "Null, ParseDate(\"dd/MM/yyyy\"), Optional(ParseDouble())");
+
+        runner.enqueue("John,22/111954,abc\r\nBob,01/03/2004,45.0\r\nMary,10/071998,38.5\r\nHarry,15/14367,34.7");
+        runner.run();
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 1);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
+
+        runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
+                "At {line=1, row=1}, '22/111954' could not be parsed as a Date at {column=2}, " +
+                        "'abc' could not be parsed as a Double at {column=3}" +
+                        "At {line=3, row=3}, '10/071998' could not be parsed as a Date at {column=2}" +
+                        "At {line=4, row=4}, '15/14367' could not be parsed as a Date at {column=2}");
+    }
+
+    @Test
+    public void testValidateLinesIndividuallyAndIncludeAllViolationsWithValidLinesOnly() {
+        final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
+        runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
+        runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
+        runner.setProperty(ExtendedValidateCsv.QUOTE_CHARACTER, "\"");
+        runner.setProperty(ExtendedValidateCsv.HEADER, "false");
+        runner.setProperty(ExtendedValidateCsv.VALIDATION_STRATEGY, ExtendedValidateCsv.VALIDATE_LINES_INDIVIDUALLY);
+
+        runner.setProperty(ExtendedValidateCsv.INCLUDE_ALL_VIOLATIONS, "true");
+
+
+        runner.setProperty(ExtendedValidateCsv.SCHEMA, "Null, ParseDate(\"dd/MM/yyyy\"), Optional(ParseDouble())");
+
+        runner.enqueue("John,22/11/1954,45.8\r\nBob,01/03/2004,45.0\r\nMary,10/07/1998,38.5");
+        runner.run();
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 1);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 0);
+
+    }
+
+    @Test
+    public void testValidateWholeFlowFileAndAccumulateAllErrors() {
+        final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
+        runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
+        runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
+        runner.setProperty(ExtendedValidateCsv.QUOTE_CHARACTER, "\"");
+        runner.setProperty(ExtendedValidateCsv.HEADER, "false");
+        runner.setProperty(ExtendedValidateCsv.VALIDATION_STRATEGY, ExtendedValidateCsv.VALIDATE_WHOLE_FLOWFILE);
+
+        runner.setProperty(ExtendedValidateCsv.ACCUMULATE_ALL_ERRORS, "true");
+
+
+        runner.setProperty(ExtendedValidateCsv.SCHEMA, "Null, ParseDate(\"dd/MM/yyyy\"), Optional(ParseDouble())");
+
+        runner.enqueue("John,22/111954,abc\r\nBob,01/03/2004,45.0\r\nMary,10/071998,38.5");
+        runner.run();
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 0);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
+
+        runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
+                "'22/111954' could not be parsed as a Date at {line=1, row=1, column=2}" +
+                        "'10/071998' could not be parsed as a Date at {line=3, row=3, column=2}");
+    }
+
+    @Test
+    public void testValidateWholeFlowFileAndAccumulateAllErrorsWithValidLinesOnly() {
+        final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
+        runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
+        runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
+        runner.setProperty(ExtendedValidateCsv.QUOTE_CHARACTER, "\"");
+        runner.setProperty(ExtendedValidateCsv.HEADER, "false");
+        runner.setProperty(ExtendedValidateCsv.VALIDATION_STRATEGY, ExtendedValidateCsv.VALIDATE_WHOLE_FLOWFILE);
+
+        runner.setProperty(ExtendedValidateCsv.ACCUMULATE_ALL_ERRORS, "true");
+
+
+        runner.setProperty(ExtendedValidateCsv.SCHEMA, "Null, ParseDate(\"dd/MM/yyyy\"), Optional(ParseDouble())");
+
+        runner.enqueue("John,22/11/1954,45.8\r\nBob,01/03/2004,45.0\r\nMary,10/07/1998,38.5");
+        runner.run();
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 1);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 0);
+
+    }
+
+    @Test
+    public void testValidateWholeFlowFileAccumulateAllErrorsAndIncludeAllViolations() {
+        final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
+        runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
+        runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
+        runner.setProperty(ExtendedValidateCsv.QUOTE_CHARACTER, "\"");
+        runner.setProperty(ExtendedValidateCsv.HEADER, "false");
+
+        runner.setProperty(ExtendedValidateCsv.ACCUMULATE_ALL_ERRORS, "true");
+        runner.setProperty(ExtendedValidateCsv.INCLUDE_ALL_VIOLATIONS, "true");
+
+
+
+        runner.setProperty(ExtendedValidateCsv.SCHEMA, "Null, ParseDate(\"dd/MM/yyyy\"), Optional(ParseDouble())");
+
+        runner.enqueue("John,2211/1954,abc\r\nBob,01/03/2004,45.0\r\nMary,10/071998,abc\r\nHarry,01/05/1988,56.5");
+        runner.run();
+        runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 0);
+
+
+        runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
+                "At {line=1, row=1}, '2211/1954' could not be parsed as a Date at {column=2}, " +
+                        "'abc' could not be parsed as a Double at {column=3}" +
+                        "At {line=3, row=3}, '10/071998' could not be parsed as a Date at {column=2}," +
+                        " 'abc' could not be parsed as a Double at {column=3}");
+
+    }
+
+    @Test
+    public void testValidateWholeFlowFileWithoutAccumulateAllErrorsAndWithoutIncludeAllViolations() {
+        final TestRunner runner = TestRunners.newTestRunner(new ExtendedValidateCsv());
+        runner.setProperty(ExtendedValidateCsv.DELIMITER_CHARACTER, ",");
+        runner.setProperty(ExtendedValidateCsv.END_OF_LINE_CHARACTER, "\r\n");
+        runner.setProperty(ExtendedValidateCsv.QUOTE_CHARACTER, "\"");
+        runner.setProperty(ExtendedValidateCsv.HEADER, "false");
+
+
+        runner.setProperty(ExtendedValidateCsv.SCHEMA, "Null, ParseDate(\"dd/MM/yyyy\"), Optional(ParseDouble())");
+
+        runner.enqueue("John,2211/1954,abc\r\nBob,01/03/2004,45.0\r\nMary,10/071998,abc");
+        runner.run();
+        runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
+        runner.assertTransferCount(ExtendedValidateCsv.REL_VALID, 0);
+
+
+        runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
+                "'2211/1954' could not be parsed as a Date at {line=1, row=1, column=2}");
+
+    }
 }
