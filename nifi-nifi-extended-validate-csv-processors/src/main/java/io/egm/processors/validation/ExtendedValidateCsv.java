@@ -530,10 +530,10 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                     } catch (final SuperCsvException e) {
                         valid.set(false);
                         if(includeAllViolations && !isWholeFFValidation) {
-                            validationError.updateAndGet(error -> error + e.getLocalizedMessage());
+                            validationError.updateAndGet(error -> error + e.getLocalizedMessage() + "\n");
                         }
                         if(accumulateAllErrors) {
-                            validationError.updateAndGet(error -> error + e.getLocalizedMessage());
+                            validationError.updateAndGet(error -> error + e.getLocalizedMessage() + "\n");
                         } else if (isWholeFFValidation) {
                             validationError.set(e.getLocalizedMessage());
                             logger.debug("Failed to validate {} against schema due to {}; routing to 'invalid'", new Object[]{flowFile}, e);
@@ -676,24 +676,24 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                     }
 
                 } catch (SuperCsvException e) {
+                    final String message = String.format("validation.error.message.line_%d = ", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber());
+                    final String coordinates = String.format(" at column=%d", e.getCsvContext().getColumnNumber());
                     if (includeAllViolations) {
                         if (errors.isEmpty()) {
-                            errors.add(String.format("At {line=%d, row=%d}", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber()));
+                            errors.add(message);
                         }
-                        final String coordinates = String.format("{column=%d}", e.getCsvContext().getColumnNumber());
-                        final String errorMessage = e.getLocalizedMessage() + " at " + coordinates;
+                        final String errorMessage = e.getLocalizedMessage() + coordinates;
                         errors.add(errorMessage);
                     } else {
-                        final String coordinates = String.format("{line=%d, row=%d, column=%d}", e.getCsvContext().getLineNumber(),
-                                e.getCsvContext().getRowNumber(), e.getCsvContext().getColumnNumber());
-                        final String errorMessage = e.getLocalizedMessage() + " at " + coordinates;
-                        throw new SuperCsvException(errorMessage);
+                        final String errorMessage = message + e.getLocalizedMessage() + coordinates;
+                        errors.add(errorMessage);
+                        throw new SuperCsvException(String.join(", ", errors).replaceFirst("," , " "));
                     }
                 }
             }
 
             if (!errors.isEmpty()) {
-                throw new SuperCsvException(String.join(", ", errors));
+                throw new SuperCsvException(String.join(", ", errors).replaceFirst("," , " "));
             }
         }
     }
