@@ -125,7 +125,7 @@ public class ExtendedValidateCsvTests {
         runner.run();
         runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
-                "At {line=1, row=1}, '22/111954' could not be parsed as a Date at {column=2}, 'abc' could not be parsed as a Double at {column=3}");
+                "validation.error.message.line_1 =   '22/111954' could not be parsed as a Date at column=2, 'abc' could not be parsed as a Double at column=3");
     }
 
     @Test
@@ -203,7 +203,7 @@ public class ExtendedValidateCsvTests {
         runner.run();
         runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
-                "'testapache.org' does not match the regular expression '[a-z0-9\\._]+@[a-z0-9\\.]+' at {line=1, row=1, column=3}");
+                "validation.error.message.line_1 = 'testapache.org' does not match the regular expression '[a-z0-9\\._]+@[a-z0-9\\.]+' at column=3");
     }
 
     @Test
@@ -409,10 +409,9 @@ public class ExtendedValidateCsvTests {
         runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
 
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
-                "At {line=1, row=1}, '22/111954' could not be parsed as a Date at {column=2}, " +
-                        "'abc' could not be parsed as a Double at {column=3}" +
-                        "At {line=3, row=3}, '10/071998' could not be parsed as a Date at {column=2}" +
-                        "At {line=4, row=4}, '15/14367' could not be parsed as a Date at {column=2}");
+                "validation.error.message.line_1 =   '22/111954' could not be parsed as a Date at column=2, 'abc' could not be parsed as a Double at column=3\n" +
+                        "validation.error.message.line_3 =   '10/071998' could not be parsed as a Date at column=2\n" +
+                        "validation.error.message.line_4 =   '15/14367' could not be parsed as a Date at column=2\n");
     }
 
     @Test
@@ -456,8 +455,8 @@ public class ExtendedValidateCsvTests {
         runner.assertTransferCount(ExtendedValidateCsv.REL_INVALID, 1);
 
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
-                "'22/111954' could not be parsed as a Date at {line=1, row=1, column=2}" +
-                        "'10/071998' could not be parsed as a Date at {line=3, row=3, column=2}");
+                "validation.error.message.line_1 = '22/111954' could not be parsed as a Date at column=2\n" +
+                        "validation.error.message.line_3 = '10/071998' could not be parsed as a Date at column=2\n");
     }
 
     @Test
@@ -503,10 +502,8 @@ public class ExtendedValidateCsvTests {
 
 
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
-                "At {line=1, row=1}, '2211/1954' could not be parsed as a Date at {column=2}, " +
-                        "'abc' could not be parsed as a Double at {column=3}" +
-                        "At {line=3, row=3}, '10/071998' could not be parsed as a Date at {column=2}," +
-                        " 'abc' could not be parsed as a Double at {column=3}");
+                "validation.error.message.line_1 =   '2211/1954' could not be parsed as a Date at column=2, 'abc' could not be parsed as a Double at column=3\n" +
+                        "validation.error.message.line_3 =   '10/071998' could not be parsed as a Date at column=2, 'abc' could not be parsed as a Double at column=3\n");
 
     }
 
@@ -528,7 +525,7 @@ public class ExtendedValidateCsvTests {
 
 
         runner.getFlowFilesForRelationship(ExtendedValidateCsv.REL_INVALID).get(0).assertAttributeEquals("validation.error.message",
-                "'2211/1954' could not be parsed as a Date at {line=1, row=1, column=2}");
+                "validation.error.message.line_1 = '2211/1954' could not be parsed as a Date at column=2");
 
     }
 }
