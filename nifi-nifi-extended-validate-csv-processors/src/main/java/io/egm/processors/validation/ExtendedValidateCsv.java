@@ -676,8 +676,8 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                     }
 
                 } catch (SuperCsvException e) {
-                    final String message = String.format("validation.error.message.line_%d = ", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber());
-                    final String coordinates = String.format(" at column=%d", e.getCsvContext().getColumnNumber());
+                    final String message = String.format("line %d :", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber());
+                    final String coordinates = String.format(" at column %d", e.getCsvContext().getColumnNumber());
                     if (includeAllViolations) {
                         if (errors.isEmpty()) {
                             errors.add(message);
@@ -685,7 +685,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                         final String errorMessage = e.getLocalizedMessage() + coordinates;
                         errors.add(errorMessage);
                     } else {
-                        final String errorMessage = message + e.getLocalizedMessage() + coordinates;
+                        final String errorMessage = message + " " + e.getLocalizedMessage() + coordinates;
                         errors.add(errorMessage);
                         throw new SuperCsvException(String.join(", ", errors).replaceFirst("," , " "));
                     }
@@ -693,7 +693,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
             }
 
             if (!errors.isEmpty()) {
-                throw new SuperCsvException(String.join(", ", errors).replaceFirst("," , " "));
+                throw new SuperCsvException(String.join(", ", errors).replaceFirst("," , ""));
             }
         }
     }
