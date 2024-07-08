@@ -572,7 +572,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 session.transfer(flowFile, REL_VALID);
             } else {
                 session.getProvenanceReporter().route(flowFile, REL_INVALID);
-                session.putAttribute(flowFile, "validation.error.message", validationError.get());
+                session.putAttribute(flowFile, "validation.error.message", "\n" + validationError.get());
                 session.transfer(flowFile, REL_INVALID);
             }
         } else {
@@ -597,7 +597,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 session.getProvenanceReporter().route(invalidFF.get(), REL_INVALID, (totalCount.get() - okCount.get()) + " invalid line(s)");
                 session.putAttribute(invalidFF.get(), "count.invalid.lines", Integer.toString((totalCount.get() - okCount.get())));
                 session.putAttribute(invalidFF.get(), "count.total.lines", Integer.toString(totalCount.get()));
-                session.putAttribute(invalidFF.get(), "validation.error.message", validationError.get());
+                session.putAttribute(invalidFF.get(), "validation.error.message", "\n" + validationError.get());
                 session.transfer(invalidFF.get(), REL_INVALID);
                 session.remove(flowFile);
             } else {
@@ -605,7 +605,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                 session.getProvenanceReporter().route(invalidFF.get(), REL_INVALID, "All " + totalCount.get() + " line(s) are invalid");
                 session.putAttribute(invalidFF.get(), "count.invalid.lines", Integer.toString(totalCount.get()));
                 session.putAttribute(invalidFF.get(), "count.total.lines", Integer.toString(totalCount.get()));
-                session.putAttribute(invalidFF.get(), "validation.error.message", validationError.get());
+                session.putAttribute(invalidFF.get(), "validation.error.message", "\n" + validationError.get());
                 session.transfer(invalidFF.get(), REL_INVALID);
                 session.remove(validFF.get());
                 session.remove(flowFile);
@@ -676,7 +676,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                     }
 
                 } catch (SuperCsvException e) {
-                    final String message = String.format("line %d :", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber());
+                    final String message = String.format("\tline %d :", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber());
                     final String coordinates = String.format(" at column %d", e.getCsvContext().getColumnNumber());
                     if (includeAllViolations) {
                         if (errors.isEmpty()) {
