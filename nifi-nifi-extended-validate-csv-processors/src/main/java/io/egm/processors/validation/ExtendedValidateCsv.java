@@ -676,7 +676,7 @@ public class ExtendedValidateCsv extends AbstractProcessor {
                     }
 
                 } catch (SuperCsvException e) {
-                    final String message = String.format("\tline %d :", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber());
+                    final String message = String.format("\t\tline %d :", e.getCsvContext().getLineNumber(), e.getCsvContext().getRowNumber());
                     final String coordinates = String.format(" at column %d", e.getCsvContext().getColumnNumber());
                     if (includeAllViolations) {
                         if (errors.isEmpty()) {
