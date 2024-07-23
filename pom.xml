@@ -24,7 +24,7 @@
 
     <groupId>io.egm</groupId>
     <artifactId>nifi-extended-validate-csv</artifactId>
-    <version>1.23.2</version>
+    <version>1.27.0</version>
     <packaging>pom</packaging>
 
     <modules>
