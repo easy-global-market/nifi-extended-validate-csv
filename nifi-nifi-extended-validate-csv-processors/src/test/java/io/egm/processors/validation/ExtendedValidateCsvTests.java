@@ -20,6 +20,8 @@ import org.apache.nifi.util.TestRunner;
 import org.apache.nifi.util.TestRunners;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 public class ExtendedValidateCsvTests {
 
     @Test
@@ -305,12 +307,15 @@ public class ExtendedValidateCsvTests {
         runner.assertValid();
 
         int hashcode = "test".hashCode();
-        runner.setVariable("schema", "RequireHashCode(" + hashcode + "), RequireSubStr(\"test\")");
-        runner.setVariable("comma", ",");
-        runner.setVariable("quote", "\"");
-        runner.setVariable("crlf", "\r\n");
-
-        runner.enqueue("test,test");
+        runner.enqueue(
+            "test,test",
+            Map.ofEntries(
+                Map.entry("schema", "RequireHashCode(" + hashcode + "), RequireSubStr(\"test\")"),
+                Map.entry("comma", ","),
+                Map.entry("quote", "\""),
+                Map.entry("crlf", "\r\n")
+            )
+        );
         runner.run();
         runner.assertAllFlowFilesTransferred(ExtendedValidateCsv.REL_VALID, 1);
     }
